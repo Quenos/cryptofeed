@@ -108,6 +108,9 @@ class Bitmex(API):
                 elif r.status_code == 429:
                     sleep(API_REFRESH)
                     continue
+                elif r.status_code == 400 and 'expired' in r.text:
+                    sleep(API_REFRESH)
+                    continue
                 elif r.status_code != 200:
                     self._handle_error(r, LOG)
                 else:
@@ -173,6 +176,53 @@ class Bitmex(API):
         for data in self._get('execution/tradeHistory', symbol, start, end, retry, retry_wait):
             yield list(map(self._fills_normalization, data))
 
+    def _asset_normalization(self, asset: dict) -> dict:
+        return {'name': asset['symbol'], 'min_trading_size': asset['lotSize'],
+                       'tick_size': asset['tickSize'],
+                       'size_increment': asset['tickSize']}
+
+    def get_assets(self, symbol=None, start=None, end=None, retry=None, retry_wait=10):
+        for data in self._get('instrument/active', symbol, start, end, retry, retry_wait):
+            yield list(map(self._asset_normalization, data))
+
+    def _position_normalization(self, pos: dict) -> dict:
+        """
+          {'account': 1223021, 'symbol': 'XBTU20', 'currency': 'XBt', 'underlying': 'XBT',
+           'quoteCurrency': 'USD', 'commission': 0.00075, 'initMarginReq': 0.01, 'maintMarginReq': 0.004,
+           'riskLimit': 5000000000, 'leverage': 100, 'crossMargin': True, 'deleveragePercentile': 1,
+           'rebalancedPnl': 13601, 'prevRealisedPnl': 0, 'prevUnrealisedPnl': 0,
+           'prevClosePrice': 9274.32, 'openingTimestamp': '2020-07-02T09:00:00.000Z', 'openingQty': 4000,
+           'openingCost': -43728500, 'openingComm': 8020, 'openOrderBuyQty': 1000,
+           'openOrderBuyCost': -10857000, 'openOrderBuyPremium': 0, 'openOrderSellQty': 2000,
+           'openOrderSellCost': -21194000, 'openOrderSellPremium': 0, 'execBuyQty': 0, 'execBuyCost': 0,
+           'execSellQty': 0, 'execSellCost': 0, 'execQty': 0, 'execCost': 0, 'execComm': 0,
+           'currentTimestamp': '2020-07-02T09:59:20.340Z', 'currentQty': 4000, 'currentCost': -43728500,
+           'currentComm': 8020, 'realisedCost': -190500, 'unrealisedCost': -43538000,
+           'grossOpenCost': 10857000, 'grossOpenPremium': 0, 'grossExecCost': 0, 'isOpen': True,
+           'markPrice': 9274.7, 'markValue': -43128000, 'riskValue': 53985000, 'homeNotional': 0.43128,
+           'foreignNotional': -4000, 'posState': '', 'posCost': -43538000, 'posCost2': -43538000,
+           'posCross': 0, 'posInit': 435380, 'posComm': 32981, 'posLoss': 0, 'posMargin': 468361,
+           'posMaint': 207133, 'posAllowance': 0, 'taxableMargin': 0, 'initMargin': 124937,
+           'maintMargin': 878361, 'sessionMargin': 0, 'targetExcessMargin': 0, 'varMargin': 0,
+           'realisedGrossPnl': 190500, 'realisedTax': 0, 'realisedPnl': 182480, 'unrealisedGrossPnl': 410000,
+           'longBankrupt': 0, 'shortBankrupt': 0, 'taxBase': 0, 'indicativeTaxRate': None, 'indicativeTax': 0,
+           'unrealisedTax': 0, 'unrealisedPnl': 410000, 'unrealisedPnlPcnt': 0.0094, 'unrealisedRoePcnt': 0.9417,
+           'simpleQty': None, 'simpleCost': None, 'simpleValue': None, 'simplePnl': None, 'simplePnlPcnt': None,
+           'avgCostPrice': 9187.7986, 'avgEntryPrice': 9187.7986, 'breakEvenPrice': 9147, 'marginCallPrice': 3774,
+           'liquidationPrice': 3774, 'bankruptPrice': 3768, 'timestamp': '2020-07-02T09:59:20.340Z',
+           'lastPrice': 9274.7, 'lastValue': -43128000}
+        """
+        return {
+            'symbol': pos['symbol'],
+            'side': 'buy' if pos['currentQty'] >= 0 else 'sell',
+            'size': pos['currentQty'] if pos['currentQty'] >= 0 else pos['currentQty'] * -1,
+            'entryPrice': pos['avgEntryPrice']
+        }
+
+    def position(self, symbol=None, start=None, end=None, retry=None, retry_wait=10):
+        for data in self._get('position', symbol, start, end, retry, retry_wait):
+            yield list(map(self._position_normalization, data))
+
     def _money_flow_normalization(self, mf: dict) -> dict:
         """
         {'transactID': 'd16912d9-557c-ef38-a035-7a4426a428d6', 'account': 1223021, 'currency': 'XBt',
@@ -182,6 +232,8 @@ class Bitmex(API):
          'timestamp': '2020-04-18T13:13:50.808Z'}
          """
 
+        if mf['transactType'] == 'UnrealisedPNL':
+            return {}
         if mf['fee'] is not None:
             fee = mf['fee'] * 0.00000001
         else:

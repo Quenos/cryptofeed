@@ -5,6 +5,7 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import asyncio
+import signal
 from time import time as time
 from socket import error as socket_error
 import zlib
@@ -86,10 +87,6 @@ class FeedHandler:
         self.log_messages_on_error = log_messages_on_error
         self.raw_message_capture = raw_message_capture
         self.handler_enabled = handler_enabled
-        self.user_task = []
-
-    def add_user_task(self, *user_task):
-        self.user_task = user_task
 
     def add_feed(self, feed, timeout=120, **kwargs):
         """
@@ -146,11 +143,14 @@ class FeedHandler:
 
         try:
             loop = asyncio.get_event_loop()
+            loop.set_exception_handler(handle_exception)
+            signals = (signal.SIGHUP, signal.SIGTERM, signal.SIGINT)
+            for s in signals:
+                loop.add_signal_handler(
+                    s, lambda s=s: asyncio.create_task(shutdown(s, loop)))
             # Good to enable when debugging
             # loop.set_debug(True)
 
-            if self.user_task:
-                loop.create_task(self._user_task())
             for feed in self.feeds:
                 if isinstance(feed, RestFeed):
                     loop.create_task(self._rest_connect(feed))
@@ -174,11 +174,6 @@ class FeedHandler:
                     await websocket.close()
                     break
             await asyncio.sleep(self.timeout_interval)
-
-    async def _user_task(self):
-        while True:
-            await self.user_task[0][0](self.user_task[0][1])
-            await asyncio.sleep(0.4)
 
     async def _rest_connect(self, feed):
         """
@@ -206,36 +201,41 @@ class FeedHandler:
         """
         retries = 0
         delay = 1
-        while retries <= self.retries or self.retries == -1:
-            self.last_msg[feed.uuid] = None
-            try:
-                # Coinbase frequently will not respond to pings within the ping interval, so
-                # disable the interval in favor of the internal watcher, which will
-                # close the connection and reconnect in the event that no message from the exchange
-                # has been received (as opposed to a missing ping)
-                async with websockets.connect(feed.address, ping_interval=30, ping_timeout=None,
-                        max_size=2**23, max_queue=None, origin=feed.origin) as websocket:
-                    asyncio.ensure_future(self._watch(feed.uuid, websocket))
-                    # connection was successful, reset retry count and delay
-                    retries = 0
-                    delay = 1
-                    if isinstance(feed, FTX):
-                        await feed.login(websocket)
-                    await feed.subscribe(websocket)
-                    await self._handler(websocket, feed.message_handler, feed.uuid)
-            except (ConnectionClosed, ConnectionAbortedError, ConnectionResetError, socket_error) as e:
-                LOG.warning("%s: encountered connection issue %s - reconnecting...", feed.id, str(e), exc_info=True)
-                await asyncio.sleep(delay)
-                retries += 1
-                delay *= 2
-            except Exception:
-                LOG.error("%s: encountered an exception, reconnecting", feed.id, exc_info=True)
-                await asyncio.sleep(delay)
-                retries += 1
-                delay *= 2
+        try:
+            while retries <= self.retries or self.retries == -1:
+                self.last_msg[feed.uuid] = None
+                try:
+                    # Coinbase frequently will not respond to pings within the ping interval, so
+                    # disable the interval in favor of the internal watcher, which will
+                    # close the connection and reconnect in the event that no message from the exchange
+                    # has been received (as opposed to a missing ping)
+                    async with websockets.connect(feed.address, ping_interval=30, ping_timeout=None,
+                            max_size=2**23, max_queue=None, origin=feed.origin) as websocket:
+                        asyncio.ensure_future(self._watch(feed.uuid, websocket))
+                        # connection was successful, reset retry count and delay
+                        retries = 0
+                        delay = 1
+                        if isinstance(feed, FTX):
+                            await feed.login(websocket)
+                        await feed.subscribe(websocket)
+                        await self._handler(websocket, feed.message_handler, feed.uuid)
+                except asyncio.CancelledError:
+                    raise asyncio.CancelledError
+                except (ConnectionClosed, ConnectionAbortedError, ConnectionResetError, socket_error) as e:
+                    LOG.warning("%s: encountered connection issue %s - reconnecting...", feed.id, str(e), exc_info=True)
+                    await asyncio.sleep(delay)
+                    retries += 1
+                    delay *= 2
+                except Exception:
+                    LOG.error("%s: encountered an exception, reconnecting", feed.id, exc_info=True)
+                    await asyncio.sleep(delay)
+                    retries += 1
+                    delay *= 2
 
-        LOG.error("%s: failed to reconnect after %d retries - exiting", feed.id, retries)
-        raise ExhaustedRetries()
+            LOG.error("%s: failed to reconnect after %d retries - exiting", feed.id, retries)
+            raise ExhaustedRetries()
+        except asyncio.CancelledError:
+            pass
 
     async def _handler(self, websocket, handler, feed_id):
         try:
@@ -252,6 +252,8 @@ class FeedHandler:
                 async for message in websocket:
                     self.last_msg[feed_id] = time()
                     await handler(message, self.last_msg[feed_id])
+        except asyncio.CancelledError:
+            raise
         except Exception:
             if self.log_messages_on_error:
                 if feed_id in {HUOBI, HUOBI_DM}:
@@ -307,3 +309,29 @@ class FeedHandler:
                 self.feeds.append(feed)
                 self.last_msg[feed.uuid] = None
                 self.timeout[feed.uuid] = timeout
+
+
+def handle_exception(loop, context):
+    tasks = [t for t in asyncio.all_tasks() if t is not
+             asyncio.current_task()]
+
+    [task.cancel() for task in tasks]
+
+    LOG.info(f"Cancelling {len(tasks)} outstanding tasks")
+    loop.stop()
+
+
+async def shutdown(loop, signal=None):
+    """Cleanup tasks tied to the service's shutdown."""
+    LOG.info(f"Received exit signal {signal.name}...")
+    LOG.info("Closing database connections")
+    LOG.info("Nacking outstanding messages")
+    tasks = [t for t in asyncio.all_tasks() if t is not
+             asyncio.current_task()]
+
+    [task.cancel() for task in tasks]
+
+    LOG.info(f"Cancelling {len(tasks)} outstanding tasks")
+    loop.stop()
+
+

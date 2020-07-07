@@ -15,7 +15,7 @@ from cryptofeed.defines import BINANCE_FUTURES as BINANCE_ID, SELL, BUY, BID, AS
 from cryptofeed.standards import pair_std_to_exchange
 
 LOG = logging.getLogger('rest')
-RATE_LIMIT_SLEEP = 0.2
+RATE_LIMIT_SLEEP = 1
 
 
 class Binance(API):
@@ -38,10 +38,11 @@ class Binance(API):
             resp = requests.get(url, params={} if not params else params)
             self._handle_error(resp, LOG)
             return resp.json()
+
         return helper()
 
     def all_balances(self):
-        parameters = f'recvWindow={self.recv_window}&timestamp={int(round(time.time())*1000)}'
+        parameters = f'recvWindow={self.recv_window}&timestamp={int(round(time.time()) * 1000)}'
         sig, req = self._sign(parameters)
         while True:
             r = requests.get(f"{self.api}/fapi/v2/balance?{parameters}&signature={sig}", headers=req.headers)
@@ -81,7 +82,7 @@ class Binance(API):
             parameters += f'&symbol={symbol}'
         parameters += f'&startTime={start}&endTime={end}'
         parameters += f'&limit=1000'
-        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time())*1000)}'
+        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time()) * 1000)}'
         sig, req = self._sign(parameters)
         while True:
             r = requests.get(f"{self.api}/fapi/v1/income?{parameters}&signature={sig}", headers=req.headers)
@@ -122,7 +123,7 @@ class Binance(API):
             parameters += f'&symbol={symbol}'
         parameters += f'&startTime={start}&endTime={end}'
         parameters += f'&limit=1000'
-        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time())*1000)}'
+        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time()) * 1000)}'
         sig, req = self._sign(parameters)
         while True:
             r = requests.get(f"{self.api}/fapi/v1/income?{parameters}&signature={sig}", headers=req.headers)
@@ -177,7 +178,7 @@ class Binance(API):
         parameters = f'symbol={symbol}'
         parameters += f'&fromId={0}'
         parameters += f'&limit=1000'
-        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time())*1000)}'
+        parameters += f'&recvWindow={self.recv_window}&timestamp={int(round(time.time()) * 1000)}'
         sig, req = self._sign(parameters)
         while True:
             r = requests.get(f"{self.api}/fapi/v1/userTrades?{parameters}&signature={sig}", headers=req.headers)
@@ -195,6 +196,81 @@ class Binance(API):
 
             data = r.json()
             return data
+
+    @staticmethod
+    def _positions_normalization(pos):
+        """
+            {'symbol': 'BTCUSDT', 'positionAmt': '0.000', 'entryPrice': '0.00000',
+             'markPrice': '9222.66966116', 'unRealizedProfit': '0.00000000', 'liquidationPrice': '0',
+             'leverage': '20', 'maxNotionalValue': '5000000',
+              'marginType': 'cross', 'isolatedMargin': '0.00000000', 'isAutoAddMargin': 'false',
+              'positionSide': 'BOTH'}
+             }
+        """
+        try:
+            ret_val = []
+            for p in pos:
+                if float(p['positionAmt']) == 0.0:
+                    continue
+                ret_val.append({'symbol': p['symbol'],
+                                'side': 'buy' if float(p['positionAmt']) >= 0 else 'sell',
+                                'size': float(p['positionAmt']) if float(p['positionAmt']) >= 0
+                                else float(p['positionAmt']) * -1,
+                                'entryPrice': p['entryPrice']
+                                })
+            return ret_val
+        except Exception as ex:
+            print(' ')
+
+    def positions(self):
+        result = None
+        parameters = f'recvWindow={self.recv_window}&timestamp={int(round(time.time()) * 1000)}'
+        sig, req = self._sign(parameters)
+        while True:
+            r = requests.get(f"{self.api}/fapi/v2/positionRisk?{parameters}&signature={sig}", headers=req.headers)
+            if r.status_code == 429:
+                sleep(RATE_LIMIT_SLEEP)
+                continue
+            elif r.status_code == 500:
+                LOG.warning("%s: 500 for URL %s - %s", self.ID, r.url, r.text)
+                sleep(10)
+                continue
+            elif r.status_code != 200:
+                self._handle_error(r, LOG)
+            else:
+                sleep(RATE_LIMIT_SLEEP)
+            result = r.json()
+            break
+        norm_result = self._positions_normalization(result)
+        return norm_result
+
+    def get_assets(self):
+        result = None
+        while True:
+            r = requests.get(f"{self.api}/fapi/v1/exchangeInfo")
+            if r.status_code == 429:
+                sleep(RATE_LIMIT_SLEEP)
+                continue
+            elif r.status_code == 500:
+                LOG.warning("%s: 500 for URL %s - %s", self.ID, r.url, r.text)
+                sleep(10)
+                continue
+            elif r.status_code != 200:
+                self._handle_error(r, LOG)
+            else:
+                sleep(RATE_LIMIT_SLEEP)
+            result = r.json()
+            break
+        norm_result = []
+        try:
+            for asset in result['symbols']:
+                norm_result.append({'name': asset['symbol'][0:-4],
+                                    'min_trading_size': asset['filters'][2]['minQty'],
+                                    'tick_size': asset['filters'][0]['tickSize'],
+                                    'size_increment': asset['filters'][1]['stepSize']})
+        except Exception as ex:
+            print(' ')
+        return norm_result
 
     def _sign(self, parameters):
         request = Request('GET')

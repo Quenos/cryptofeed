@@ -33,6 +33,20 @@ class Deribit(API):
         super().__init__(config, sandbox, **kwargs)
         self.token = None
 
+    def _assets_normalization(self, asset: dict) -> dict:
+        return {'name': asset['instrument_name'],
+                'min_trading_size': asset['min_trade_amount'],
+                'tick_size': asset['tick_size'],
+                'size_increment': asset['min_trade_amount']}
+
+    async def get_assets(self):
+        msg = self._get_instruments_msg()
+        await self._call_api(json.dumps(msg))
+        try:
+            yield list(map(self._assets_normalization, self.result))
+        except Exception as ex:
+            print(' ')
+
     def _wallet_value_normalization(self, wallet_value: dict) -> dict:
         return {
             'coin': wallet_value['currency'],
@@ -132,6 +146,23 @@ class Deribit(API):
             'fees': fills['fee'],
         }
 
+    def _positions_normalization(self, pos: dict) -> dict:
+        """
+            {'total_profit_loss': 0.0, 'size_currency': 0.0, 'size': 0.0, 'settlement_price': 9211.13,
+            'realized_profit_loss': 0.0, 'realized_funding': 0.0, 'open_orders_margin': 0.0,
+            'mark_price': 9201.89, 'maintenance_margin': 0.0, 'leverage': 100, 'kind': 'future',
+            'instrument_name': 'BTC-PERPETUAL', 'initial_margin': 0.0, 'index_price': 9203.56,
+            'floating_profit_loss': 0.0, 'estimated_liquidation_price': 0.0, 'direction': 'zero',
+            'delta': 0.0, 'average_price': 0.0}
+        """
+        print(' ')
+        return {
+            'symbol': pos['instrument_name'],
+            'side': pos['direction'],
+            'size': pos['size'],
+            'entryPrice': pos['average_price']
+        }
+
     async def fills(self):
         msg = self._get_fills_msg()
         stop = False
@@ -144,6 +175,14 @@ class Deribit(API):
                 msg = self._get_fills_msg(end_id)
             else:
                 stop = True
+
+    async def positions(self):
+        msg = self._get_positions_msg()
+        stop = False
+        while not stop:
+            await self._call_api(json.dumps(msg))
+            yield list(map(self._positions_normalization, self.result))
+            stop = True
 
     def trades(self, symbol: str, start=None, end=None, retry=None, retry_wait=10):
         symbol = pair_std_to_exchange(symbol, self.ID)
@@ -282,17 +321,22 @@ class Deribit(API):
         return json.dumps(msg)
 
     async def _call_api(self, msg):
-        async with websockets.connect('wss://www.deribit.com/ws/api/v2') as websocket:
-            auth = self._get_auth_msg()
-            await websocket.send(auth)
-            response = await websocket.recv()
-            self.result = json.loads(response)['result']
-            if 'refresh_token' in self.result:
-                self.token = self.result['refresh_token']
-            await websocket.send(msg)
-            result = await websocket.recv()
-            self.result = json.loads(result)['result']
-            print(' ')
+        while True:
+            try:
+                async with websockets.connect('wss://www.deribit.com/ws/api/v2') as websocket:
+                    auth = self._get_auth_msg()
+                    await websocket.send(auth)
+                    response = await websocket.recv()
+                    self.result = json.loads(response)['result']
+                    if 'refresh_token' in self.result:
+                        self.token = self.result['refresh_token']
+                    await websocket.send(msg)
+                    result = await websocket.recv()
+                    self.result = json.loads(result)['result']
+                    break
+            except OSError as ex:
+                LOG.warning('Deribit OS error was raised')
+                sleep(10)
 
     def _get_fills_msg(self, end_id=None):
         # give the end if, because result are returned youngest to oldest
@@ -309,6 +353,18 @@ class Deribit(API):
             }
         if end_id is not None:
             msg['params']['end_id'] = str(end_id)
+        return msg
+
+    def _get_positions_msg(self, end_id=None):
+        # give the end if, because result are returned youngest to oldest
+        msg = {
+                "jsonrpc": "2.0",
+                "id": 9305,
+                "method": "private/get_positions",
+                "params": {
+                            "currency": "BTC",
+                }
+            }
         return msg
 
     def _get_funding_payment_msg(self, continuation=None):
@@ -372,6 +428,18 @@ class Deribit(API):
             }
         return msg
 
+    def _get_instruments_msg(self):
+        msg = \
+            {
+                "jsonrpc": "2.0",
+                "id": 7617,
+                "method": "public/get_instruments",
+                "params": {
+                    "currency": "BTC",
+                    "expired": False
+                }
+            }
+        return msg
 
 if __name__ == "__main__":
     e = Deribit(None)

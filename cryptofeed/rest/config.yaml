@@ -1,9 +1,9 @@
 binance_futures:
-    key_id: 't7KBfSAQO9fxhOTMPetRVTjSVqPCsRozGNorkBbgcNXVj0CBDB3hte99Q5wn9bNl'
-    key_secret: 'cGVIPBEBIIvtmZI10sHTKSuMDpgyxUORymtQcjhejXBRkSqkTboeYLwp1uxyitGI'
+    key_id: 'xK4iBIDVfjkTlh5ajqjK1o5ujmtcOuy0xdK3EtpH2iUZRZXhvsuaSoOknN2c28vM'
+    key_secret: '4tekstNiF8SbJhwTALpQV9KAJAiywgLngnA0gAYv9apRxjmrVrgnjmsID6G5MMTt'
 bitmex:
-    key_id: 'Fbg2S8YBFETNBuq9PwtoXdFT'
-    key_secret: 'aA6y4PgY2kHkBFivhRwMRwlWOZxLTIfwhJjBUcYxkgGHM6Jn'
+    key_id: 'GiDbpgEBLGPrukiJb7St2bV_'
+    key_secret: 'RrJYzZlq8wpAgVNcI2WCDHY8t_OUbC0r0zESNK6vFYA4ZVV4'
 bitfinex:
     key_id: null
     key_secret: null
@@ -21,15 +21,15 @@ kraken:
     key_id: null
     key_secret: null
 deribit:
-    key_id: '_Gdc5Wwl'
-    key_secret: 'eurVzS9SKNx6QoiSMc17IAjkeMZZ5Sj7cM9t8LC9sSc'
+    key_id: '-D5YHdyP'
+    key_secret: 'abdFm3PY38AvLGtukEk8BZfvx2zxQGOWn8v6R7cL4e4'
 ftx:
     ftx_coen:
-        key_id: '5NK7ZWaHHgk-hH3KoBRRXNQhlD3p0Np8yTP_OLRk'
-        key_secret: '8JC4a_ZxRzHVZw_D7UrjjcO0pRnLMNv8ouvyGCqf'
+        key_id: '_JtnzaJ0n1zbthMBoRZRFbBX7CK_2eZ0CncWcTDz'
+        key_secret: 'Hr5yd4__8PRTj7sPYCnoz-PJjMVGNS8pDQHtkrc1'
     ftx_artur:
-        key_id: 'JQBlrgV52ZDvRln5lI-_uePS1tLUNamotNquDWRt'
-        key_secret: 'hj-H7H9IJYPiP2IDSiCHocf89ZYuNL3SfjWuvzCq'
+        key_id: 'CyTz3MvS3snUv3lSBeQ6AP0Jr9spnxf481G_Xs9X'
+        key_secret: 'QC5Xtd9mk2J1YokSz0K8oZXtdKONX06V9o5-WiYt'
     ftx_government:
-        key_id: 'x0lbDLGQvdjEIJhBndSzUib4cNuI-9LQDWu4oIh9'
-        key_secret: '77ChhMP2wn0BEXsS3_xvE4SwEmgnhXsmUlc6srtu'
+        key_id: 'ivQR71O1z0tgUJWdsuXsdATLMeoztuHFxo5bQX3l'
+        key_secret: 'BRcEhnwDkMhbfj6N2sycms5jixLsGneBoycEg6cn'

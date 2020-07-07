@@ -4,6 +4,7 @@ Copyright (C) 2017-2019  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
+from inspect import currentframe, getframeinfo
 import requests
 import hmac
 from urllib import parse
@@ -95,7 +96,8 @@ class FTX(API):
             for deposit in data:
                 deposit['time'] = API._timestamp(deposit['time']).timestamp() * 1000
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
 
@@ -120,7 +122,8 @@ class FTX(API):
             for withdrawal in data:
                 withdrawal['time'] = API._timestamp(withdrawal['time']).timestamp() * 1000
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
 
@@ -144,7 +147,8 @@ class FTX(API):
             data = r.json()['result']
 
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
 
@@ -168,7 +172,8 @@ class FTX(API):
 
             data = r.json()['result']
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
 
@@ -210,7 +215,8 @@ class FTX(API):
             for payment in data:
                 payment['time'] = API._timestamp(payment['time']).timestamp() * 1000
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
 
@@ -255,7 +261,8 @@ class FTX(API):
             for fills in data:
                 fills['time'] = API._timestamp(fills['time']).timestamp() * 1000
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             if len(data) == 5000:
                 end_date = data[4999]['time'] - 1
@@ -281,9 +288,37 @@ class FTX(API):
 
             data = r.json()['result']
             if data == []:
-                LOG.warning("%s: No data", self.ID)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
 
             return data
+
+    def get_assets(self):
+        r = requests.get(f"{self.api}/markets")
+
+        while True:
+            if r.status_code == 429:
+                sleep(RATE_LIMIT_SLEEP)
+                continue
+            elif r.status_code == 500:
+                LOG.warning("%s: 500 for URL %s - %s", self.ID, r.url, r.text)
+                sleep(10)
+                continue
+            elif r.status_code != 200:
+                self._handle_error(r, LOG)
+            else:
+                sleep(RATE_LIMIT_SLEEP)
+
+            result = []
+            data = r.json()['result']
+            try:
+                for asset in data:
+                    result.append({'name': asset['name'], 'min_trading_size': asset['minProvideSize'],
+                                   'tick_size': asset['priceIncrement'],
+                                   'size_increment': asset['sizeIncrement']})
+            except Exception as ex:
+                print(' ')
+            return result
 
     def funding(self, symbol: str, start_date=None, end_date=None, retry=None, retry_wait=10):
         start = None
@@ -325,7 +360,8 @@ class FTX(API):
 
             data = r.json()['result']
             if not data:
-                LOG.warning("%s: No data for range %d - %d", self.ID, start, end)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
             else:
                 end = int(API._timestamp(data[-1]["time"]).timestamp()) + 1
 
@@ -393,7 +429,8 @@ class FTX(API):
 
             data = r.json()['result']
             if data == []:
-                LOG.warning("%s: No data for range %d - %d", self.ID, start, end)
+                frameinfo = getframeinfo(currentframe())
+                LOG.warning("%s: No data", f'{self.ID}: file: {frameinfo.filename}, line: {frameinfo.lineno}')
             else:
                 end = int(API._timestamp(data[-1]["time"]).timestamp()) + 1
 

@@ -4,11 +4,12 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-
+from inspect import currentframe, getframeinfo
 import asyncio
 import aiohttp
 import hmac
 import time
+from datetime import datetime
 import os
 import yaml
 import pandas as pd
@@ -143,27 +144,31 @@ class FTX(Feed):
               ]
             }
         """
-        wait_time = len(pairs) / 30
+        wait_time = len(pairs) / 300
         async with aiohttp.ClientSession() as session:
             while True:
                 for pair in pairs:
                     if not '-PERP' in pair:
                         continue
-                    async with session.get(f"https://ftx.com/api/funding_rates?future={pair}") as response:
+                    last_fetched_time = self.funding.get(pair, None)
+                    if last_fetched_time:
+                        end_point = f"https://ftx.com/api/funding_rates?future={pair}&start_time={last_fetched_time+1}"
+                    else:
+                        end_point = f"https://ftx.com/api/funding_rates?future={pair}"
+                    async with session.get(end_point) as response:
                         data = await response.text()
                         data = json.loads(data, parse_float=Decimal)
 
-                        last_update = self.funding.get(pair, None)
-                        update = str(data['result'][0]['rate']) + str(data['result'][0]['time'])
-                        if last_update and last_update == update:
-                            continue
-                        else:
-                            self.funding[pair] = update
-
-                        await self.callback(FUNDING, feed=self.id,
-                                            pair=pair_exchange_to_std(data['result'][0]['future']),
-                                            rate=data['result'][0]['rate'],
-                                            timestamp=timestamp_normalize(self.id, data['result'][0]['time']))
+                        for f in data['result']:
+                            await self.callback(FUNDING, feed=self.id,
+                                                pair=pair_exchange_to_std(f['future']),
+                                                rate=f['rate'],
+                                                timestamp=timestamp_normalize(self.id, f['time']))
+                            await asyncio.sleep(0)
+                        try:
+                            self.funding[pair] = pd.Timestamp(str(data['result'][0]['time'])).timestamp()
+                        except IndexError:
+                            pass
                     await asyncio.sleep(wait_time)
 
     async def _trade(self, msg: dict, timestamp: float):
