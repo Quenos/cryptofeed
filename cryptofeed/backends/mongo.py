@@ -4,10 +4,11 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-import motor.motor_asyncio
 import bson
+import motor.motor_asyncio
 
-from cryptofeed.backends.backend import BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback, BackendTickerCallback, BackendTradeCallback, BackendOpenInterestCallback
+from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback,
+                                         BackendOpenInterestCallback, BackendTickerCallback, BackendTradeCallback, BackendLiquidationsCallback)
 
 
 class MongoCallback:
@@ -18,9 +19,11 @@ class MongoCallback:
         self.collection = key if key else self.default_key
 
     async def write(self, feed: str, pair: str, timestamp: float, receipt_timestamp: float, data: dict):
-        d = {'feed': feed, 'pair': pair, 'timestamp': timestamp, 'receipt_timestamp': timestamp, 'delta': data['delta'], 'bid': bson.BSON.encode(data['bid']), 'ask': bson.BSON.encode(data['ask'])}
-        await self.db[self.collection].insert_one(d)
-
+        if 'delta' in data:
+            d = {'feed': feed, 'pair': pair, 'timestamp': timestamp, 'receipt_timestamp': receipt_timestamp, 'delta': data['delta'], 'bid': bson.BSON.encode(data['bid']), 'ask': bson.BSON.encode(data['ask'])}
+            await self.db[self.collection].insert_one(d)
+        else:
+            await self.db[self.collection].insert_one(data)
 
 class TradeMongo(MongoCallback, BackendTradeCallback):
     default_key = 'trades'
@@ -44,3 +47,7 @@ class TickerMongo(MongoCallback, BackendTickerCallback):
 
 class OpenInterestMongo(MongoCallback, BackendOpenInterestCallback):
     default_key = 'open_interest'
+
+
+class LiquidationsMongo(MongoCallback, BackendLiquidationsCallback):
+    default_key = 'liquidations'

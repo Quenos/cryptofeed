@@ -11,9 +11,11 @@ from itertools import product
 
 from sortedcontainers import SortedDict as sd
 
-from cryptofeed.defines import L2_BOOK, BUY, SELL, BID, ASK, TRADES, TICKER, BLOCKCHAIN, L3_BOOK
+from cryptofeed.defines import BID, ASK, BLOCKCHAIN, BUY, L2_BOOK, L3_BOOK, SELL, TICKER, TRADES
+from cryptofeed.exceptions import MissingSequenceNumber
 from cryptofeed.feed import Feed
-from cryptofeed.standards import timestamp_normalize, pair_exchange_to_std
+from cryptofeed.standards import pair_exchange_to_std, timestamp_normalize
+
 
 LOG = logging.getLogger('feedhandler')
 
@@ -59,7 +61,7 @@ class Blockchain(Feed):
 
     async def _handle_l2_msg(self, msg: str, timestamp: float):
         """
-        Subscribed messsage
+        Subscribed message
         {
           "seqnum": 1,
           "event": "subscribed",
@@ -152,7 +154,9 @@ class Blockchain(Feed):
     async def message_handler(self, msg: str, timestamp: float):
         msg = json.loads(msg, parse_float=Decimal)
         if self.seq_no is not None and msg['seqnum'] != self.seq_no + 1:
-            raise ValueError("Incorrect sequence number. TODO: implement ws restart")
+            LOG.warning("%s: Missing sequence number detected!", self.id)
+            raise MissingSequenceNumber("Missing sequence number, restarting")
+
         self.seq_no = msg['seqnum']
 
         if 'channel' in msg:

@@ -1,6 +1,62 @@
 ## Changelog
 
-### 1.5.0
+### 1.6.2
+  * Bugfix: Fix aggregated callbacks (Renko and OHLCV) when used with exchanges that support order types
+  * Bugfix: Fix broken example/demo code
+  * Feature: New data channel - `futures_index` - demonstrated in ByBit
+  * Feature: Add stop callback when exiting loop, add stop method placeholder for base callbacks
+  * Bugfix: Fix NBBO callback
+  * Feature: Orderbook sequence number validation for HitBTC
+  * Feature: Kraken orderbook checksum support in Kraken
+  * Feature: KrakenFutures sequence number check added
+  * Feature: Add optional caching to postgres backend
+  * Feature: New Exchange - Binance Delivery
+  * Feature: Liquidation for OKEX
+  * Bugfix: Adjust ping interval on websocket connection, some exchanges require pings more frequently
+  * Feature: Checksum validation for orderbooks on OKEX and OKCoin
+
+### 1.6.1 (2020-11-12)
+  * Feature: New kwarg for exchange feed - `snapshot_interval` - used to control number of snapshot updates sent to client
+  * Feature: Support for rabbitmq message routing
+  * Feature: Support for raw file playback. Will be useful for testing features and building out new test suites for cryptofeed. 
+  * Feature: Arctic library quota can be configured, new default is unlimited
+  * Feature: New exchange: Probit
+  * Bugfix: Correctly store receipt timestamp in mongo backend
+  * Bugfix: FTX - set a funding rate requests limit constant (10 requests per second, 60 seconds pause between loops)
+  * Bugfix: Open Interest data on FTX erroneously had timestamps set to None
+  * Update: Binance Jersey shutdown - feed removed
+  
+### 1.6.0 (2020-09-28)
+  * Feature: Validate FTX book checksums (optionally enabled)
+  * Bugfix: Subscribing only to open interest on binance futures gave connection errors
+  * Feature: Authentication for Influxdb 1.x
+  * Feature: Override logging defaults with environment variables (filename and log level)
+  * Bugfix: For Coinbase L3 books need to ignore/drop some change updates (per docs)
+  * Bugfix: Obey rate limits when using Coinbase REST API to get L3 book snapshots
+  * Bugfix: Ignore auction updates from Gemini
+  * Feature: Add order type (limit/market) for Kraken Trades
+  * Feature: Exchange specific information available via info classmethod - contains pairs, data channels and tick size
+  * Feature: Funding data supported on HuobiSwap
+  * Bugfix: Fix broken mongo callbacks in backends
+
+### 1.5.1 (2020-08-26)
+  * Bugfix: #136 - Kraken Rate limiting
+  * Feature: Funding data on Binance Futures
+  * Bugfix: Support new Huobi tradeId field, old id field deprecated
+  * Bugfix: Unclear errors when unsupported data feeds used
+  * Bugfix: Handle order status messages more gracefully in Coinbase
+  * Bugfix: Fix Kraken pair mappings
+  * Feature: New Exchange - Gate.io
+  * Feature: Remove \_SWAP, \_FUTURE channel (and callback) types - determine correct type at subscribe time based on symbol
+  * Docs: Add documentation about callbacks
+  * Feature: Deribit provides sequence number for book updates - check them to ensure no messages lost
+  * Bugfix: Fix timestamp on Binance Futures Open Interest
+  * Bugfix: Update/standardize liquidation callbacks
+  * Feature: Update Upbit subscription methods based on updated docs
+  * Bugfix: Ticker not working correctly on Binance Futures
+  * Feature: Liquidations callbacks for backends
+
+### 1.5.0 (2020-07-31)
   * Feature: New Exchange - FTX US
   * Feature: Add funding data to rest library
   * Bugfix: DSX updated their api, websocket no longer supported. Removing DSX
@@ -8,6 +64,8 @@
   * Feature: Support for HuobiDM next quarter contracts
   * Bugfix: Fix datetime fields in elasticsearch
   * Feature: BinanceFutures: support ticker, open interest and Liquidation, FTX: support open interest and liquidations, Deribit: liquidations support
+  * Bugfix: Fix receipt timestamps in Postgres backend
+  * Bugfix: Huobi Swap Init
 
 ### 1.4.1 (2020-05-22)
   * Feature: Support for disabling timeouts on feeds
@@ -45,7 +103,7 @@
   * Feature: New exchange: Binance Futures
   * Feature: New Exchange: Binance Jersey
   * Feature: Funding data on Kraken Futures
-  * Feature: User defined pair seperator (default still -)
+  * Feature: User defined pair separator (default still -)
   * Feature: Postgres backend
   * Feature: Deribit Funding
   * Bugfix: Deribit subscriptions using config subscribed to symbols incorrectly
@@ -204,10 +262,10 @@
   * Feature #40: NBBO now uses best bid/ask from L2 books
   * Feature #28: GDAX now renamed Coinbase and uses coinbase endpoints
   * Feature: ZeroMQ backend. Write updates directly to zmq connection
-  * Feature: UDP Socket backend. Write updates directy to UDP socket
+  * Feature: UDP Socket backend. Write updates directly to UDP socket
 
 ### 0.16.0 (2018-10-4)
-  * Feature: L2 books are now all price aggregted amounts, L3 books are price aggregated orders
+  * Feature: L2 books are now all price aggregated amounts, L3 books are price aggregated orders
   * Book deltas supported on all feeds
   * Bugfix: Fix NBBO feed
 

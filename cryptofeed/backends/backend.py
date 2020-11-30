@@ -6,8 +6,8 @@ associated with this software.
 '''
 from decimal import Decimal
 
-from cryptofeed.defines import BID, ASK
 from cryptofeed.backends._util import book_convert, book_delta_convert
+from cryptofeed.defines import BID, ASK
 
 
 class BackendBookCallback:
@@ -25,11 +25,13 @@ class BackendBookDeltaCallback:
 
 
 class BackendTradeCallback:
-    async def __call__(self, *, feed: str, pair: str, side: str, amount: Decimal, price: Decimal, order_id=None, timestamp: float, receipt_timestamp: float):
+    async def __call__(self, *, feed: str, pair: str, side: str, amount: Decimal, price: Decimal, order_id=None, timestamp: float, receipt_timestamp: float, order_type: str=None):
         data = {'feed': feed, 'pair': pair, 'timestamp': timestamp, 'receipt_timestamp': receipt_timestamp,
                 'side': side, 'amount': self.numeric_type(amount), 'price': self.numeric_type(price)}
         if order_id:
             data['id'] = order_id
+        if order_type:
+            data['order_type'] = order_type
         await self.write(feed, pair, timestamp, receipt_timestamp, data)
 
 
@@ -55,4 +57,16 @@ class BackendTickerCallback:
 class BackendOpenInterestCallback:
     async def __call__(self, *, feed: str, pair: str, open_interest: Decimal, timestamp: float, receipt_timestamp: float):
         data = {'feed': feed, 'pair': pair, 'open_interest': self.numeric_type(open_interest), 'receipt_timestamp': receipt_timestamp, 'timestamp': timestamp}
+        await self.write(feed, pair, timestamp, receipt_timestamp, data)
+
+
+class BackendFuturesIndexCallback:
+    async def __call__(self, *, feed: str, pair: str, futures_index: Decimal, timestamp: float, receipt_timestamp: float):
+        data = {'feed': feed, 'pair': pair, 'open_interest': self.numeric_type(futures_index), 'receipt_timestamp': receipt_timestamp, 'timestamp': timestamp}
+        await self.write(feed, pair, timestamp, receipt_timestamp, data)
+
+
+class BackendLiquidationsCallback:
+    async def __call__(self, *, feed: str, pair: str, side: str, leaves_qty: Decimal, price: Decimal, order_id: str, timestamp: float, receipt_timestamp: float):
+        data = {'feed': feed, 'pair': pair, 'side': side, 'leaves_qty': self.numeric_type(leaves_qty), 'price': self.numeric_type(price), 'order_id': order_id if order_id else "None", 'receipt_timestamp': receipt_timestamp, 'timestamp': timestamp}
         await self.write(feed, pair, timestamp, receipt_timestamp, data)

@@ -5,36 +5,43 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import asyncio
-from time import time as time
-from socket import error as socket_error
+import logging
+import os
+from signal import SIGTERM
 import zlib
 from collections import defaultdict
 from copy import deepcopy
+from socket import error as socket_error
+from time import time
+import functools
 
 import websockets
 from websockets import ConnectionClosed
 
-from cryptofeed.defines import L2_BOOK, BLOCKCHAIN
-from cryptofeed.exchange.blockchain import Blockchain
-from cryptofeed.log import get_logger
-from cryptofeed.defines import DERIBIT, BINANCE, GEMINI, HITBTC, BITFINEX, BITMEX, BITSTAMP, POLONIEX, COINBASE, KRAKEN, KRAKEN_FUTURES, HUOBI, HUOBI_DM, OKCOIN, OKEX, COINBENE, BYBIT, BITTREX, BITCOINCOM, BINANCE_US, BITMAX, BINANCE_JERSEY, BINANCE_FUTURES, UPBIT, HUOBI_SWAP, FTX_US
+from cryptofeed.defines import (BINANCE, BINANCE_FUTURES, BINANCE_DELIVERY, BINANCE_US, BITCOINCOM, BITFINEX,
+                                BITMAX, BITMEX, BITSTAMP, BITTREX, BLOCKCHAIN, BYBIT, COINBASE, COINBENE,
+                                PROBIT, DERIBIT)
 from cryptofeed.defines import EXX as EXX_str
 from cryptofeed.defines import FTX as FTX_str
-from cryptofeed.exchanges import *
-from cryptofeed.nbbo import NBBO
-from cryptofeed.feed import RestFeed
+from cryptofeed.defines import (FTX_US, GATEIO, GEMINI, HITBTC, HUOBI, HUOBI_DM, HUOBI_SWAP, KRAKEN,
+                                KRAKEN_FUTURES, L2_BOOK, OKCOIN, OKEX, POLONIEX, UPBIT)
 from cryptofeed.exceptions import ExhaustedRetries
+from cryptofeed.exchanges import *
+from cryptofeed.feed import RestFeed
+from cryptofeed.log import get_logger
+from cryptofeed.nbbo import NBBO
 
 
-LOG = get_logger('feedhandler', 'feedhandler.log')
-
+LOG = get_logger('feedhandler',
+                 os.environ.get('CRYPTOFEED_FEEDHANDLER_LOG_FILENAME', "feedhandler.log"),
+                 int(os.environ.get('CRYPTOFEED_FEEDHANDLER_LOG_LEVEL', logging.WARNING)))
 
 # Maps string name to class name for use with config
 _EXCHANGES = {
     BINANCE: Binance,
     BINANCE_US: BinanceUS,
-    BINANCE_JERSEY: BinanceJersey,
     BINANCE_FUTURES: BinanceFutures,
+    BINANCE_DELIVERY: BinanceDelivery,
     BITCOINCOM: BitcoinCom,
     BITFINEX: Bitfinex,
     BITMAX: Bitmax,
@@ -59,7 +66,9 @@ _EXCHANGES = {
     OKCOIN: OKCoin,
     OKEX: OKEx,
     POLONIEX: Poloniex,
-    UPBIT: Upbit
+    UPBIT: Upbit,
+    GATEIO: Gateio,
+    PROBIT: Probit
 }
 
 
@@ -86,6 +95,34 @@ class FeedHandler:
         self.raw_message_capture = raw_message_capture
         self.handler_enabled = handler_enabled
 
+    def playback(self, feed, filenames):
+        loop = asyncio.get_event_loop()
+        return loop.run_until_complete(self._playback(feed, filenames))
+
+    async def _playback(self, feed, filenames):
+        counter = 0
+        callbacks = defaultdict(int)
+
+        class FakeWS:
+            async def send(self, *args, **kwargs):
+                pass
+
+        async def internal_cb(*args, **kwargs):
+            callbacks[kwargs['cb_type']] += 1
+
+        for cb_type, handler in feed.callbacks.items():
+            f = functools.partial(internal_cb, cb_type=cb_type)
+            handler.append(f)
+
+        await feed.subscribe(FakeWS())
+
+        for filename in filenames if isinstance(filenames, list) else [filenames]:
+            with open(filename, 'r') as fp:
+                for line in fp:
+                    timestamp, message = line.split(":", 1)
+                    counter += 1
+                    await feed.message_handler(message, timestamp)
+            return {'messages_processed': counter, 'callbacks': dict(callbacks)}
     def add_feed(self, feed, timeout=120, **kwargs):
         """
         feed: str or class
@@ -144,6 +181,12 @@ class FeedHandler:
             # Good to enable when debugging
             # loop.set_debug(True)
 
+            def handle_stop_signals():
+                raise SystemExit
+
+            for signal in [SIGTERM]:
+                loop.add_signal_handler(signal, handle_stop_signals)
+
             for feed in self.feeds:
                 if isinstance(feed, RestFeed):
                     loop.create_task(self._rest_connect(feed))
@@ -153,8 +196,13 @@ class FeedHandler:
                 loop.run_forever()
         except KeyboardInterrupt:
             LOG.info("Keyboard Interrupt received - shutting down")
+        except SystemExit:
+            LOG.info("System Exit received - shutting down")
         except Exception:
             LOG.error("Unhandled exception", exc_info=True)
+        finally:
+            for feed in self.feeds:
+                loop.run_until_complete(feed.stop())
 
     async def _watch(self, feed_id, websocket):
         if self.timeout[feed_id] == -1:
@@ -200,8 +248,15 @@ class FeedHandler:
                 # Coinbase frequently will not respond to pings within the ping interval, so
                 # disable the interval in favor of the internal watcher, which will
                 # close the connection and reconnect in the event that no message from the exchange
-                # has been received (as opposed to a missing ping)
-                async with websockets.connect(feed.address, ping_interval=30, ping_timeout=None,
+                # has been received (as opposed to a missing ping).
+                #
+                # address can be None for binance futures when only open interest is configured
+                # because that data is collected over a periodic REST polling task
+                if feed.address is None:
+                    await feed.subscribe(None)
+                    return
+
+                async with websockets.connect(feed.address, ping_interval=10, ping_timeout=None,
                         max_size=2**23, max_queue=None, origin=feed.origin) as websocket:
                     asyncio.ensure_future(self._watch(feed.uuid, websocket))
                     # connection was successful, reset retry count and delay

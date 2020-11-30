@@ -5,14 +5,14 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import logging
-from yapic import json
-from decimal import Decimal
 import zlib
+from decimal import Decimal
 
 from sortedcontainers import SortedDict as sd
+from yapic import json
 
+from cryptofeed.defines import BID, ASK, BUY, HUOBI, L2_BOOK, SELL, TRADES
 from cryptofeed.feed import Feed
-from cryptofeed.defines import HUOBI, BUY, SELL, TRADES, BID, ASK, L2_BOOK
 from cryptofeed.standards import pair_exchange_to_std, timestamp_normalize
 
 
@@ -54,18 +54,29 @@ class Huobi(Feed):
     async def _trade(self, msg: dict, timestamp: float):
         """
         {
-            'ch': 'market.btcusd.trade.detail',
-            'ts': 1549773923965,
+            'ch': 'market.adausdt.trade.detail',
+            'ts': 1597792835344,
             'tick': {
-                'id': 100065340982,
-                'ts': 1549757127140,
-                'data': [{'id': '10006534098224147003732', 'amount': Decimal('0.0777'), 'price': Decimal('3669.69'), 'direction': 'buy', 'ts': 1549757127140}]}}
+                'id': 101801945127,
+                'ts': 1597792835336,
+                'data': [
+                    {
+                        'id': Decimal('10180194512782291967181675'),   <- per docs this is deprecated
+                        'ts': 1597792835336,
+                        'tradeId': 100341530602,
+                        'amount': Decimal('0.1'),
+                        'price': Decimal('0.137031'),
+                        'direction': 'sell'
+                    }
+                ]
+            }
+        }
         """
         for trade in msg['tick']['data']:
             await self.callback(TRADES,
                                 feed=self.id,
                                 pair=pair_exchange_to_std(msg['ch'].split('.')[1]),
-                                order_id=trade['id'],
+                                order_id=trade['tradeId'],
                                 side=BUY if trade['direction'] == 'buy' else SELL,
                                 amount=Decimal(trade['amount']),
                                 price=Decimal(trade['price']),

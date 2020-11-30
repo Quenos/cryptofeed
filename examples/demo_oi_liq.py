@@ -6,11 +6,12 @@ associated with this software.
 '''
 from decimal import Decimal
 
-from cryptofeed.callback import OpenInterestCallback, LiquidationCallback
 from cryptofeed import FeedHandler
+from cryptofeed.callback import LiquidationCallback, OpenInterestCallback
+from cryptofeed.defines import BID, ASK, LIQUIDATIONS, OPEN_INTEREST
 from cryptofeed.exchanges import FTX, BinanceFutures, Deribit
-from cryptofeed.defines import  BID, ASK, OPEN_INTEREST, LIQUIDATIONS
-from cryptofeed.pairs import ftx_pairs, binance_futures_pairs
+from cryptofeed.pairs import binance_futures_pairs, ftx_pairs
+
 
 # Examples of some handlers for different updates. These currently don't do much.
 # Handlers should conform to the patterns/signatures in callback.py
@@ -42,12 +43,8 @@ async def oi(feed, pair, open_interest, timestamp, receipt_timestamp):
     print(f'Timestamp: {timestamp} Feed: {feed} Pair: {pair} open interest: {open_interest}')
 
 
-async def volume(**kwargs):
-    print(f"Volume: {kwargs}")
-
-
-async def liquidations(**kwargs):
-    print(f"Liquidations: {kwargs}")
+async def liquidations(feed, pair, side, leaves_qty, price, order_id, timestamp, receipt_timestamp):
+    print(f"Liquidation @ {timestamp}: {feed} {pair} {side}: qty: {leaves_qty} @ {price} - order id: {order_id}")
 
 
 def main():
@@ -56,11 +53,9 @@ def main():
                    callbacks={OPEN_INTEREST: OpenInterestCallback(oi),
                               LIQUIDATIONS: LiquidationCallback(liquidations)}))
 
-    f.add_feed(BinanceFutures(pairs=binance_futures_pairs(), channels=[OPEN_INTEREST, LIQUIDATIONS],
-                              callbacks={OPEN_INTEREST: OpenInterestCallback(oi),
-                                         LIQUIDATIONS: LiquidationCallback(liquidations)}))
+    f.add_feed(BinanceFutures(pairs=binance_futures_pairs(), channels=[OPEN_INTEREST, LIQUIDATIONS], callbacks={OPEN_INTEREST: OpenInterestCallback(oi), LIQUIDATIONS: LiquidationCallback(liquidations)}))
 
-    f.add_feed(Deribit(pairs=['BTC-PERPETUAL'], channels=[OPEN_INTEREST, LIQUIDATIONS],
+    f.add_feed(Deribit(pairs=['BTC-PERPETUAL', 'ETH-PERPETUAL'], channels=[LIQUIDATIONS, OPEN_INTEREST],
                        callbacks={OPEN_INTEREST: OpenInterestCallback(oi),
                                   LIQUIDATIONS: LiquidationCallback(liquidations)}))
     f.run()

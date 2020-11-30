@@ -5,10 +5,10 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 
-from cryptofeed.callback import FundingCallback
 from cryptofeed import FeedHandler
-from cryptofeed.exchanges import FTX
+from cryptofeed.callback import FundingCallback
 from cryptofeed.defines import FUNDING
+from cryptofeed.exchanges import FTX
 
 
 # Examples of some handlers for different updates. These currently don't do much.

@@ -4,17 +4,17 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-from yapic import json
 import logging
 from collections import defaultdict
-from decimal import Decimal
 from datetime import datetime as dt
+from decimal import Decimal
 
 import requests
 from sortedcontainers import SortedDict as sd
+from yapic import json
 
+from cryptofeed.defines import BID, ASK, BITMEX, BUY, FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES
 from cryptofeed.feed import Feed
-from cryptofeed.defines import L2_BOOK, BUY, SELL, BID, ASK, TRADES, FUNDING, BITMEX, OPEN_INTEREST, TICKER, LIQUIDATIONS
 from cryptofeed.standards import timestamp_normalize
 
 
@@ -28,7 +28,7 @@ class Bitmex(Feed):
     def __init__(self, pairs=None, channels=None, callbacks=None, **kwargs):
         super().__init__('wss://www.bitmex.com/realtime', pairs=pairs, channels=channels, callbacks=callbacks, **kwargs)
 
-        active_pairs = self.get_active_symbols()
+        active_pairs = Bitmex.info()['pairs']
         if self.config:
             pairs = list(self.config.values())
             self.pairs = [pair for inner in pairs for pair in inner]
@@ -53,13 +53,6 @@ class Bitmex(Feed):
     @staticmethod
     def get_active_symbols_info():
         return requests.get(Bitmex.api + 'instrument/active').json()
-
-    @staticmethod
-    def get_active_symbols():
-        symbols = []
-        for data in Bitmex.get_active_symbols_info():
-            symbols.append(data['symbol'])
-        return symbols
 
     async def _trade(self, msg: dict, timestamp: float):
         """
@@ -93,6 +86,8 @@ class Bitmex(Feed):
         """
         the Full bitmex book
         """
+        # PERF perf_start(self.id, 'book_msg')
+
         delta = {BID: [], ASK: []}
         # if we reset the book, force a full update
         forced = False
@@ -148,6 +143,8 @@ class Bitmex(Feed):
         else:
             LOG.warning("%s: Unexpected l2 Book message %s", self.id, msg)
             return
+        # PERF perf_end(self.id, 'book_msg')
+        # PERF perf_log(self.id, 'book_msg')
 
         await self.book_callback(self.l2_book[pair], L2_BOOK, pair, forced, delta, timestamp, timestamp)
 
@@ -466,6 +463,7 @@ class Bitmex(Feed):
                                     leaves_qty=Decimal(data['leavesQty']),
                                     price=Decimal(data['price']),
                                     order_id=data['orderID'],
+                                    timestamp=timestamp,
                                     receipt_timestamp=timestamp)
 
     async def message_handler(self, msg: str, timestamp: float):

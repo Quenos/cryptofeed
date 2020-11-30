@@ -25,8 +25,23 @@ class Callback:
 
 
 class TradeCallback(Callback):
-    async def __call__(self, *, feed: str, pair: str, side: str, amount: Decimal, price: Decimal, order_id=None, timestamp: float, receipt_timestamp: float):
-        await super().__call__(feed, pair, order_id, timestamp, side, amount, price, receipt_timestamp)
+
+    def __init__(self, callback, include_order_type=False):
+        """
+        include_order_type is currently supported only on Kraken and Coinbase and enables
+        the order_type field in callbacks, which contains information about the order type (market/limit).
+
+        Note that to receive order_type on Coinbase, you must also subscribe to the L3_BOOK channel (though
+        do not need to specify any L3_BOOK callbacks)
+        """
+        self.include_order_type = include_order_type
+        super().__init__(callback)
+
+    async def __call__(self, *, feed: str, pair: str, side: str, amount: Decimal, price: Decimal, order_id=None, timestamp: float, receipt_timestamp: float, order_type: str=None):
+        kwargs = {}
+        if self.include_order_type:
+            kwargs['order_type'] = order_type
+        await super().__call__(feed, pair, order_id, timestamp, side, amount, price, receipt_timestamp, **kwargs)
 
 
 class TickerCallback(Callback):
@@ -59,7 +74,8 @@ class BookUpdateCallback(Callback):
 
 
 class LiquidationCallback(Callback):
-    pass
+    async def __call__(self, *, feed: str, pair: str, side: str, leaves_qty: Decimal, price: Decimal, order_id: str, timestamp: float, receipt_timestamp: float):
+        await super().__call__(feed, pair, side, leaves_qty, price, order_id, timestamp, receipt_timestamp)
 
 
 class OpenInterestCallback(Callback):
@@ -71,4 +87,8 @@ class VolumeCallback(Callback):
 
 
 class FundingCallback(Callback):
+    pass
+
+
+class FuturesIndexCallback(Callback):
     pass

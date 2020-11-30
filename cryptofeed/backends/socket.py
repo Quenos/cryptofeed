@@ -4,12 +4,14 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-import logging
 import asyncio
-from yapic import json
+import logging
 from textwrap import wrap
 
-from cryptofeed.backends.backend import BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback, BackendTickerCallback, BackendTradeCallback, BackendOpenInterestCallback
+from yapic import json
+
+from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback,
+                                         BackendOpenInterestCallback, BackendTickerCallback, BackendTradeCallback, BackendLiquidationsCallback)
 
 
 LOG = logging.getLogger('feedhandler')
@@ -117,3 +119,7 @@ class TickerSocket(SocketCallback, BackendTickerCallback):
 
 class OpenInterestSocket(SocketCallback, BackendOpenInterestCallback):
     default_key = 'open_interest'
+
+
+class LiquidationsSocket(SocketCallback, BackendLiquidationsCallback):
+    default_key = 'liquidations'

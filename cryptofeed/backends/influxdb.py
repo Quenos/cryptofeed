@@ -4,21 +4,23 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-from decimal import Decimal
 import logging
+from decimal import Decimal
+
 import requests
 
-from cryptofeed.defines import BID, ASK
+from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback,
+                                         BackendOpenInterestCallback, BackendTickerCallback, BackendTradeCallback, BackendLiquidationsCallback)
 from cryptofeed.backends.http import HTTPCallback
+from cryptofeed.defines import BID, ASK
 from cryptofeed.exceptions import UnsupportedType
-from cryptofeed.backends.backend import BackendTradeCallback, BackendBookDeltaCallback, BackendBookCallback, BackendFundingCallback, BackendTickerCallback, BackendOpenInterestCallback
 
 
 LOG = logging.getLogger('feedhandler')
 
 
 class InfluxCallback(HTTPCallback):
-    def __init__(self, addr: str, db=None, key=None, create_db=True, numeric_type=str, org=None, bucket=None, token=None, precision='ns', **kwargs):
+    def __init__(self, addr: str, db=None, key=None, create_db=True, numeric_type=str, org=None, bucket=None, token=None, precision='ns', username=None, password=None, **kwargs):
         """
         Parent class for InfluxDB callbacks
 
@@ -61,6 +63,10 @@ class InfluxCallback(HTTPCallback):
           Token string for authentication
         precision: str (For InfluxDB 2.0 compatibility)
           Precision level among (s, ms, us, ns)
+        username: str
+          Influxdb username for authentication
+        password: str
+          Influxdb password for authentication          
         """
         super().__init__(addr, **kwargs)
         if org and bucket and token:
@@ -68,9 +74,12 @@ class InfluxCallback(HTTPCallback):
             self.headers = {"Authorization": f"Token {token}"}
         else:
             if create_db:
-                r = requests.post(f'{addr}/query', data={'q': f'CREATE DATABASE {db}'})
+                r = requests.post(f'{addr}/query?u={username}&p={password}', data={'q': f'CREATE DATABASE {db}'})
                 r.raise_for_status()
-            self.addr = f"{addr}/write?db={db}"
+            if username and password:
+                self.addr = f"{addr}/write?db={db}&u={username}&p={password}"
+            else:
+                self.addr = f"{addr}/write?db={db}"
             self.headers = {}
 
         self.session = None
@@ -147,3 +156,7 @@ class TickerInflux(InfluxCallback, BackendTickerCallback):
 
 class OpenInterestInflux(InfluxCallback, BackendOpenInterestCallback):
     default_key = 'open_interest'
+
+
+class LiquidationsInflux(InfluxCallback, BackendLiquidationsCallback):
+    default_key = 'liquidations'

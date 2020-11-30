@@ -4,14 +4,18 @@ Copyright (C) 2017-2020  Bryant Moscon - bmoscon@gmail.com
 Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
-import logging
 import itertools
-from datetime import datetime as dt, timezone as tz
+import logging
+from datetime import datetime as dt
+from datetime import timezone as tz
+
 from yapic import json
 
-from cryptofeed.backends.http import HTTPCallback
 from cryptofeed.backends._util import book_flatten
-from cryptofeed.backends.backend import BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback, BackendTickerCallback, BackendTradeCallback, BackendOpenInterestCallback
+from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback,
+                                         BackendOpenInterestCallback, BackendTickerCallback, BackendTradeCallback,
+                                         BackendLiquidationsCallback)
+from cryptofeed.backends.http import HTTPCallback
 
 
 LOG = logging.getLogger('feedhandler')
@@ -92,3 +96,7 @@ class TickerElastic(ElasticCallback, BackendTickerCallback):
 
 class OpenInterestElastic(ElasticCallback, BackendOpenInterestCallback):
     default_index = 'open_interest'
+
+
+class LiquidationsElastic(ElasticCallback, BackendLiquidationsCallback):
+    default_index = 'liquidations'

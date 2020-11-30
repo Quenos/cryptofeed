@@ -6,20 +6,22 @@ associated with this software.
 '''
 
 import asyncio
+import logging
+from datetime import datetime
+from decimal import Decimal
+from time import time
+import zlib
+
 import aiohttp
 import pandas as pd
-
-from yapic import json
-import logging
-from decimal import Decimal
-from time import time as time
-from datetime import datetime
-
 from sortedcontainers import SortedDict as sd
+from yapic import json
 
-from cryptofeed.feed import Feed, RestFeed
+from cryptofeed.defines import BID, ASK, BUY
 from cryptofeed.defines import FTX as FTX_id
-from cryptofeed.defines import TRADES, BUY, SELL, BID, ASK, TICKER, L2_BOOK, FUNDING, LIQUIDATIONS, OPEN_INTEREST
+from cryptofeed.defines import FUNDING, L2_BOOK, LIQUIDATIONS, OPEN_INTEREST, SELL, TICKER, TRADES
+from cryptofeed.exceptions import BadChecksum
+from cryptofeed.feed import Feed, RestFeed
 from cryptofeed.standards import pair_exchange_to_std, timestamp_normalize
 
 
@@ -56,6 +58,26 @@ class FTX(Feed):
                     }
                 ))
 
+    def __calc_checksum(self, pair):
+        bid_it = reversed(self.l2_book[pair][BID])
+        ask_it = iter(self.l2_book[pair][ASK])
+
+        bids = [f"{bid}:{self.l2_book[pair][BID][bid]}" for bid in bid_it]
+        asks = [f"{ask}:{self.l2_book[pair][ASK][ask]}" for ask in ask_it]
+
+        if len(bids) == len(asks):
+            combined = [val for pair in zip(bids, asks) for val in pair]
+        elif len(bids) > len(asks):
+            combined = [val for pair in zip(bids[:len(asks)], asks) for val in pair]
+            combined += bids[len(asks):]
+        else:
+            combined = [val for pair in zip(bids, asks[:len(bids)]) for val in pair]
+            combined += asks[len(bids):]
+
+
+        computed = ":".join(combined).encode()
+        return zlib.crc32(computed)
+
     async def _open_interest(self, pairs: list):
         """
             {
@@ -90,7 +112,7 @@ class FTX(Feed):
                                                     feed=self.id,
                                                     pair=pair,
                                                     open_interest=oi,
-                                                    timestamp=None,
+                                                    timestamp=time(),
                                                     receipt_timestamp=time()
                                                     )
                                 self.open_interest[pair] = oi
@@ -111,7 +133,10 @@ class FTX(Feed):
               ]
             }
         """
-        wait_time = len(pairs) / 30
+        # do not send more than 30 requests per second: doing so will result in HTTP 429 errors 
+        rate_limiter = 0.1
+        # funding rates do not change frequently
+        wait_time = 60
         async with aiohttp.ClientSession() as session:
             while True:
                 for pair in pairs:
@@ -132,7 +157,8 @@ class FTX(Feed):
                                             pair=pair_exchange_to_std(data['result'][0]['future']),
                                             rate=data['result'][0]['rate'],
                                             timestamp=timestamp_normalize(self.id, data['result'][0]['time']))
-                    await asyncio.sleep(wait_time)
+                    await asyncio.sleep(rate_limiter)
+                await asyncio.sleep(wait_time)
 
     async def _trade(self, msg: dict, timestamp: float):
         """
@@ -158,6 +184,7 @@ class FTX(Feed):
                                     leaves_qty=Decimal(trade['size']),
                                     price=Decimal(trade['price']),
                                     order_id=None,
+                                    timestamp=float(timestamp_normalize(self.id, trade['time'])),
                                     receipt_timestamp=timestamp
                                     )
 
@@ -187,6 +214,7 @@ class FTX(Feed):
         {"channel": "orderbook", "market": "BTC/USD", "type": "update", "data": {"time": 1564834587.1299787,
         "checksum": 3115602423, "bids": [], "asks": [[10719.0, 14.7461]], "action": "update"}}
         """
+        check = msg['data']['checksum']
         if msg['type'] == 'partial':
             # snapshot
             pair = pair_exchange_to_std(msg['market'])
@@ -198,6 +226,8 @@ class FTX(Feed):
                     Decimal(price): Decimal(amount) for price, amount in msg['data']['asks']
                 })
             }
+            if self.checksum_validation and self.__calc_checksum(pair) != check:
+                raise BadChecksum
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, True, None, float(msg['data']['time']), timestamp)
         else:
             # update
@@ -214,6 +244,8 @@ class FTX(Feed):
                     else:
                         delta[s].append((price, amount))
                         self.l2_book[pair][s][price] = amount
+            if self.checksum_validation and self.__calc_checksum(pair) != check:
+                raise BadChecksum
             await self.book_callback(self.l2_book[pair], L2_BOOK, pair, False, delta, float(msg['data']['time']), timestamp)
 
     async def message_handler(self, msg: str, timestamp: float):

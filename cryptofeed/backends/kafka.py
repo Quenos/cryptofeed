@@ -5,11 +5,12 @@ Please see the LICENSE file for the terms and conditions
 associated with this software.
 '''
 import asyncio
-from yapic import json
 
 from aiokafka import AIOKafkaProducer
+from yapic import json
 
-from cryptofeed.backends.backend import BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback, BackendTickerCallback, BackendTradeCallback, BackendOpenInterestCallback
+from cryptofeed.backends.backend import (BackendBookCallback, BackendBookDeltaCallback, BackendFundingCallback,
+                                         BackendOpenInterestCallback, BackendTickerCallback, BackendTradeCallback, BackendLiquidationsCallback)
 
 
 class KafkaCallback:
@@ -51,3 +52,7 @@ class TickerKafka(KafkaCallback, BackendTickerCallback):
 
 class OpenInterestKafka(KafkaCallback, BackendOpenInterestCallback):
     default_key = 'open_interest'
+
+
+class LiquidationsKafka(KafkaCallback, BackendLiquidationsCallback):
+    default_key = 'liquidations'
