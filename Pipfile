@@ -13,7 +13,7 @@ verify_ssl = true
 [packages]
 aiohttp = ">=3.6.2"
 pandas = "*"
-requests = ">=2.18.4"
+requests = ">=2.32.5"
 sortedcontainers = ">=1.5.9"
 websockets = ">=7.0"
 "yapic.json" = ">=1.4.3"    # fast, drop-in replacement of the built-in python.json
